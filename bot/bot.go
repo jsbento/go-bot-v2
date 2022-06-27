@@ -14,11 +14,6 @@ import (
 
 const DogAPIURL = "https://dog.ceo/api/"
 
-type Response struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
 func New() {
 	botToken := os.Getenv("BOT_TOKEN")
 
@@ -39,7 +34,7 @@ func New() {
 
 	fmt.Println("Bot running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
 	dg.Close()
