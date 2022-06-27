@@ -10,11 +10,12 @@ import (
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jsbento/go-bot-v2/mongo"
 )
 
 const DogAPIURL = "https://dog.ceo/api/"
 
-func New() {
+func New(dbClient *mongo.MongoDBClient) {
 	botToken := os.Getenv("BOT_TOKEN")
 
 	dg, err := discordgo.New("Bot " + botToken)
