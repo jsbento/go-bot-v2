@@ -4,18 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/joho/godotenv"
 	"github.com/jsbento/go-bot-v2/mongo"
 )
 
 const DogAPIURL = "https://dog.ceo/api/"
 
 func New(dbClient *mongo.MongoDBClient) {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Could not load .env file")
+	}
 	botToken := os.Getenv("BOT_TOKEN")
 
 	dg, err := discordgo.New("Bot " + botToken)
