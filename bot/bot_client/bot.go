@@ -102,31 +102,48 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 		seed := rand.NewSource(time.Now().UnixNano())
 		r := rand.New(seed)
-		tokens := r.Intn(200) - 75
+		tokens := r.Intn(250) - 75
 		tokens = uU.ApplyPowerUps(user.PowerUps, tokens)
 		_, err = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("You rolled %d tokens", tokens))
 		if err != nil {
 			fmt.Println("Error sending message,", err)
 			return
 		}
-		_, err = dbClient.AddTokens(user.Username, tokens)
+		err = dbClient.UpdateUser(user.Username, user.PowerUps, tokens)
 		if err != nil {
 			fmt.Println("Error updating user,", err)
 			return
 		}
 	}
 
-	// Show current balance and powerups owned
 	if m.Content == "!powerups" {
-		_, err := s.ChannelMessageSend(m.ChannelID,
-			"Powerups:\n"+
-				"pId 1: No-Negatives - Negatives count as 0's. Cost: 300 tokens\n"+
-				"pId 2: 110% Boost. Cost: 500 tokens\n"+
-				"pId 3: 125% Boost. Cost: 1000 tokens\n"+
-				"pId 4: 150% Boost. Cost: 1500 tokens\n"+
-				"pId 5: 175% Boost. Cost: 2000 tokens\n"+
-				"pId 6: 200% Boost. Cost: 3000 tokens\n"+
-				"To purchase a powerup, type !powerup buy <pId>\n")
+		user, err := dbClient.GetUser(m.Author.Username)
+		if err != nil {
+			if user.Username == "" {
+				_, err = s.ChannelMessageSend(m.ChannelID, "You don't have a saved user!")
+			}
+			fmt.Println("Error getting user,", err)
+			return
+		}
+		var activeIds []string
+		active := uU.GetActivePowerUps(user.PowerUps)
+		for _, v := range active {
+			activeIds = append(activeIds, strconv.Itoa(v.Modifier))
+		}
+		powerUpMsg := "Powerups:\n" +
+			"pId 1: No-Negatives - Negatives count as 0's. Cost: 300 tokens\n" +
+			"pId 2: 110% Boost. Cost: 500 tokens\n" +
+			"pId 3: 125% Boost. Cost: 1000 tokens\n" +
+			"pId 4: 150% Boost. Cost: 1500 tokens\n" +
+			"pId 5: 175% Boost. Cost: 2000 tokens\n" +
+			"pId 6: 200% Boost. Cost: 3000 tokens\n" +
+			"To purchase a powerup, type !powerup buy <pId>\n"
+		_, err = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(
+			"Current balance: %d tokens, Active: %s\n%s",
+			user.TokenCount,
+			strings.Join(activeIds, ", "),
+			powerUpMsg,
+		))
 		if err != nil {
 			fmt.Println("Error sending message,", err)
 			return

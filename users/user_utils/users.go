@@ -21,6 +21,10 @@ func ApplyPowerUps(powerups []*uT.PowerUp, tokens int) (newTokens int) {
 			switch powerup.Modifier {
 			case NO_NEGATIVE:
 				if tokens < 0 {
+					powerup.Uses -= 1
+					if powerup.Uses <= 0 {
+						powerup.Active = false
+					}
 					return 0
 				}
 			case BOOST_110:
@@ -38,4 +42,13 @@ func ApplyPowerUps(powerups []*uT.PowerUp, tokens int) (newTokens int) {
 		}
 	}
 	return int(float64(tokens) * boostTotal)
+}
+
+func GetActivePowerUps(poweups []*uT.PowerUp) (activePowerups []*uT.PowerUp) {
+	for _, powerup := range poweups {
+		if powerup.Active {
+			activePowerups = append(activePowerups, powerup)
+		}
+	}
+	return
 }

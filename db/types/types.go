@@ -95,6 +95,9 @@ func (dbC *DBClient) PurchasePowerUp(username string, pId int) (user *uT.User, e
 	if !powerup.Active && powerup.Value <= result.TokenCount {
 		result.TokenCount -= powerup.Value
 		powerup.Active = true
+		if pId == 1 {
+			powerup.Uses = 5
+		}
 		_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"token_count": result.TokenCount, "power_ups": result.PowerUps}})
 		if err != nil {
 			return nil, err
@@ -106,6 +109,24 @@ func (dbC *DBClient) PurchasePowerUp(username string, pId int) (user *uT.User, e
 		return &result, errors.New("Not enough tokens")
 	}
 	return &result, nil
+}
+
+func (dbC *DBClient) UpdateUser(username string, powerups []*uT.PowerUp, tokens int) (err error) {
+	collection := dbC.Client.Database("discord-users").Collection("users")
+	_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"power_ups": powerups}, "$inc": bson.M{"token_count": tokens}})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (dbC *DBClient) UpdatePowerUps(username string, powerups []*uT.PowerUp) (err error) {
+	collection := dbC.Client.Database("discord-users").Collection("users")
+	_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"power_ups": powerups}})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (dbC *DBClient) Close() error {
