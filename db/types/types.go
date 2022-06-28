@@ -84,6 +84,30 @@ func (dbC *DBClient) AddTokens(username string, tokens int) (user *uT.User, err 
 	return &result, nil
 }
 
+func (dbC *DBClient) PurchasePowerUp(username string, pId int) (user *uT.User, err error) {
+	collection := dbC.Client.Database("discord-users").Collection("users")
+	var result uT.User
+	err = collection.FindOne(context.TODO(), bson.M{"username": username}, options.FindOne()).Decode(&result)
+	if err != nil {
+		return nil, err
+	}
+	powerup := result.PowerUps[pId-1]
+	if !powerup.Active && powerup.Value <= result.TokenCount {
+		result.TokenCount -= powerup.Value
+		powerup.Active = true
+		_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"token_count": result.TokenCount, "power_ups": result.PowerUps}})
+		if err != nil {
+			return nil, err
+		}
+		return &result, nil
+	} else if powerup.Active {
+		return &result, errors.New("Powerup already active")
+	} else if powerup.Value > result.TokenCount {
+		return &result, errors.New("Not enough tokens")
+	}
+	return &result, nil
+}
+
 func (dbC *DBClient) Close() error {
 	return dbC.Client.Disconnect(context.TODO())
 }

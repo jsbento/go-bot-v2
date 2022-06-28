@@ -3,11 +3,14 @@ package bot_client
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	dbT "github.com/jsbento/go-bot-v2/db/types"
 	uT "github.com/jsbento/go-bot-v2/users/types"
+	uU "github.com/jsbento/go-bot-v2/users/user_utils"
 )
 
 type Response struct {
@@ -38,6 +41,7 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		user := uT.User{
 			Username:   m.Author.Username,
 			TokenCount: 0,
+			PowerUps:   uT.SetDefaults(),
 		}
 
 		flag, err := dbClient.PostUser(&user)
@@ -87,10 +91,6 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 	}
 
-	// Implement power-ups
-	// 1. No negatives -> if negative is rolled, it doesn't count
-	// 2. Multiplier -> Multiply roll by some boost (look at stabable boosts)
-
 	if m.Content == "!roll" {
 		user, err := dbClient.GetUser(m.Author.Username)
 		if err != nil {
@@ -103,6 +103,7 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		seed := rand.NewSource(time.Now().UnixNano())
 		r := rand.New(seed)
 		tokens := r.Intn(200) - 75
+		tokens = uU.ApplyPowerUps(user.PowerUps, tokens)
 		_, err = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("You rolled %d tokens", tokens))
 		if err != nil {
 			fmt.Println("Error sending message,", err)
@@ -111,6 +112,58 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		_, err = dbClient.AddTokens(user.Username, tokens)
 		if err != nil {
 			fmt.Println("Error updating user,", err)
+			return
+		}
+	}
+
+	// Show current balance and powerups owned
+	if m.Content == "!powerups" {
+		_, err := s.ChannelMessageSend(m.ChannelID,
+			"Powerups:\n"+
+				"pId 1: No-Negatives - Negatives count as 0's. Cost: 300 tokens\n"+
+				"pId 2: 110% Boost. Cost: 500 tokens\n"+
+				"pId 3: 125% Boost. Cost: 1000 tokens\n"+
+				"pId 4: 150% Boost. Cost: 1500 tokens\n"+
+				"pId 5: 175% Boost. Cost: 2000 tokens\n"+
+				"pId 6: 200% Boost. Cost: 3000 tokens\n"+
+				"To purchase a powerup, type !powerup buy <pId>\n")
+		if err != nil {
+			fmt.Println("Error sending message,", err)
+			return
+		}
+	}
+
+	if strings.Contains(m.Content, "!powerup buy ") {
+		pId, err := strconv.Atoi(strings.Split(m.Content, " ")[2])
+		if err != nil {
+			fmt.Println("Error converting pId,", err)
+			return
+		}
+		user, err := dbClient.GetUser(m.Author.Username)
+		if err != nil {
+			if user.Username == "" {
+				_, err = s.ChannelMessageSend(m.ChannelID, "You don't have a saved user!")
+			}
+			fmt.Println("Error getting user,", err)
+			return
+		}
+		result, err := dbClient.PurchasePowerUp(user.Username, pId)
+		if err != nil {
+			if result == nil {
+				fmt.Println("Error purchasing powerup,", err)
+				return
+			} else {
+				_, err = s.ChannelMessageSend(m.ChannelID, err.Error())
+				if err != nil {
+					fmt.Println("Error sending message,", err)
+					return
+				}
+				return
+			}
+		}
+		_, err = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Successfully purchased powerup %d", pId))
+		if err != nil {
+			fmt.Println("Error sending message,", err)
 			return
 		}
 	}
