@@ -13,6 +13,15 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const (
+	DB_ERROR        = -1
+	USER_OK         = 0
+	USER_EXISTS     = 1
+	USER_NOT_EXISTS = 2
+	LOW_TOKENS      = 3
+	POWER_ACTIVE    = 4
+)
+
 type DBClient struct {
 	Client *mongo.Client
 }
@@ -39,57 +48,58 @@ func (dbC *DBClient) PostUser(user *uT.User) (flag int, err error) {
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	var result uT.User
 	err = collection.FindOne(context.TODO(), bson.M{"username": user.Username}, options.FindOne()).Decode(&result)
-	if result.Username == "" {
+	if err == mongo.ErrNoDocuments || result.Username == "" {
 		_, err = collection.InsertOne(context.TODO(), user, options.InsertOne())
-		if err != nil {
-			return -1, err
+		if err == nil {
+			return USER_OK, nil
+		} else {
+			return DB_ERROR, err
 		}
-		return 0, nil
 	} else if err != nil {
-		return -1, err
+		return DB_ERROR, err
 	}
-	return 1, errors.New("user already exists")
+	return USER_EXISTS, errors.New("You already have a saved user!")
 }
 
 func (dbC *DBClient) DeleteUser(username string) (flag int, err error) {
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	err = collection.FindOneAndDelete(context.TODO(), bson.M{"username": username}, options.FindOneAndDelete()).Decode(&uT.User{})
 	if err == mongo.ErrNoDocuments {
-		return 1, errors.New("user does not exist")
+		return USER_NOT_EXISTS, errors.New("You don't have a saved user!")
 	} else if err != nil {
-		return -1, err
+		return DB_ERROR, err
 	}
-	return 1, nil
+	return USER_OK, nil
 }
 
-func (dbC *DBClient) GetUser(username string) (result uT.User, err error) {
+func (dbC *DBClient) GetUser(username string) (result uT.User, flag int, err error) {
 	var user uT.User
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	err = collection.FindOne(context.TODO(), bson.M{"username": username}, options.FindOne()).Decode(&user)
 	if err == mongo.ErrNoDocuments {
-		return uT.User{}, errors.New("user does not exist")
+		return uT.User{}, USER_NOT_EXISTS, errors.New("You don't have a saved user!")
 	} else if err != nil {
-		return uT.User{}, err
+		return uT.User{}, DB_ERROR, err
 	}
-	return user, nil
+	return user, USER_OK, nil
 }
 
-func (dbC *DBClient) AddTokens(username string, tokens int) (user *uT.User, err error) {
+func (dbC *DBClient) AddTokens(username string, tokens int) (user *uT.User, flag int, err error) {
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	var result uT.User
 	err = collection.FindOneAndUpdate(context.TODO(), bson.M{"username": username}, bson.M{"$inc": bson.M{"token_count": tokens}}, options.FindOneAndUpdate()).Decode(&result)
 	if err != nil {
-		return nil, err
+		return nil, DB_ERROR, err
 	}
-	return &result, nil
+	return &result, USER_OK, nil
 }
 
-func (dbC *DBClient) PurchasePowerUp(username string, pId int) (user *uT.User, err error) {
+func (dbC *DBClient) PurchasePowerUp(username string, pId int) (user *uT.User, flag int, err error) {
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	var result uT.User
 	err = collection.FindOne(context.TODO(), bson.M{"username": username}, options.FindOne()).Decode(&result)
 	if err != nil {
-		return nil, err
+		return nil, DB_ERROR, err
 	}
 	powerup := result.PowerUps[pId-1]
 	if !powerup.Active && powerup.Value <= result.TokenCount {
@@ -100,33 +110,33 @@ func (dbC *DBClient) PurchasePowerUp(username string, pId int) (user *uT.User, e
 		}
 		_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"token_count": result.TokenCount, "power_ups": result.PowerUps}})
 		if err != nil {
-			return nil, err
+			return nil, DB_ERROR, err
 		}
-		return &result, nil
+		return &result, USER_OK, nil
 	} else if powerup.Active {
-		return &result, errors.New("Powerup already active")
+		return &result, POWER_ACTIVE, errors.New("Powerup already active!")
 	} else if powerup.Value > result.TokenCount {
-		return &result, errors.New("Not enough tokens")
+		return &result, LOW_TOKENS, errors.New("Not enough tokens!")
 	}
-	return &result, nil
+	return &result, USER_OK, nil
 }
 
-func (dbC *DBClient) UpdateUser(username string, powerups []*uT.PowerUp, tokens int) (err error) {
+func (dbC *DBClient) UpdateUser(username string, powerups []*uT.PowerUp, tokens int) (flag int, err error) {
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"power_ups": powerups}, "$inc": bson.M{"token_count": tokens}})
 	if err != nil {
-		return err
+		return DB_ERROR, err
 	}
-	return nil
+	return USER_OK, nil
 }
 
-func (dbC *DBClient) UpdatePowerUps(username string, powerups []*uT.PowerUp) (err error) {
+func (dbC *DBClient) UpdatePowerUps(username string, powerups []*uT.PowerUp) (flag int, err error) {
 	collection := dbC.Client.Database("discord-users").Collection("users")
 	_, err = collection.UpdateOne(context.TODO(), bson.M{"username": username}, bson.M{"$set": bson.M{"power_ups": powerups}})
 	if err != nil {
-		return err
+		return DB_ERROR, err
 	}
-	return nil
+	return USER_OK, nil
 }
 
 func (dbC *DBClient) Close() error {
